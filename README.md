@@ -1,5 +1,8 @@
 ## Single-Cell Chip Image Analysis
 
+This repo contains all the necessary data and code to re-create an analysis of single cell SD genotyping data from start to finish.  If you are interested in an overview of the data analysis associated with the data set included in this repo without running it yourself, we have included a knitted version of the Rmd [here.](https://fredhutch.github.io/SDGenotypingAnalysis/index.html)
+
+
 ## Repo Structure:
 
 ### [Typhoon Image Analysis](https://github.com/FredHutch/SDGenotypingAnalysis/tree/master/TyphoonImageAnalysis)
@@ -47,7 +50,6 @@ If this is your first time analyzing these data on this computer, do the followi
 13. **Data Integration in R:**  DataReduction.Rmd
    - To use this R markdown file, you will need to make sure that the code is being evaluated in the console, NOT inline (click on the gear icon above the Rmd and choose "Chunk Output in Console" NOT "Chunk Output Inline").  
 
-Note: We have provided an html knitted version of the Rmd [here](https://fredhutch.github.io/SDGenotypingAnalysis/index.html)
 
 ## ImageJ Analysis Details
 ### [TyphoonCrop.txt](https://github.com/FredHutch/SDGenotypingAnalysis/blob/master/TyphoonImageAnalysis/TyphoonCrop.txt)
