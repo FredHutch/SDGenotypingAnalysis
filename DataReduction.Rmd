@@ -343,7 +343,7 @@ ggsave(paste0(output, "zygBarPlot-singleCells.jpg"),
        width = 6, height = 6)
 ```
 
-## Failure rate calulations
+## Failure rate calculations
 ```{r Failure Rates}
 failureData <- snowCone4 %>% group_by( Array, Template) %>%
     summarise(FalsePositives = n_distinct(which(Filled == TRUE & AmpPos == TRUE & cellCount == 0)),
