@@ -399,8 +399,8 @@ zygBarPlot</code></pre>
        zygBarPlot,
        width = 6, height = 6)</code></pre>
 </div>
-<div id="failure-rate-calulations" class="section level2">
-<h2>Failure rate calulations</h2>
+<div id="failure-rate-calculations" class="section level2">
+<h2>Failure rate calculations</h2>
 <pre class="r"><code>failureData &lt;- snowCone4 %&gt;% group_by( Array, Template) %&gt;%
     summarise(FalsePositives = n_distinct(which(Filled == TRUE &amp; AmpPos == TRUE &amp; cellCount == 0)),
               FalseNegatives = n_distinct(which(Filled == TRUE &amp; AmpPos == FALSE &amp; cellCount == 1)),
