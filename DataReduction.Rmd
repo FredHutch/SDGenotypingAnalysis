@@ -1,20 +1,22 @@
 ---
 title: "SD Single Cell Genotyping Data Reduction"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
-*****Click on the gear above and choose:  "Chunk Output in Console" before proceeding*******
+*****Click on the gear above and choose:  "Chunk Output in Console" before proceeding*****
 
-# Initialize libraries
-```{r Load yer libraries}
-require(plyr); require(dplyr); require(tidyr); require(reshape2); require(ggplot2)
-require(ggExtra); require(ggrepel); require(gridExtra);  require(RColorBrewer); require(stringr)
+## Initialize libraries and Directory setup
+```{r Load yer libraries, echo=FALSE, message=FALSE}
+require(plyr); require(dplyr); require(tidyr); require(reshape2); require(ggplot2);
+require(ggExtra); require(ggrepel); require(gridExtra);  require(RColorBrewer); require(stringr);
 options(stringsAsFactors = FALSE)
 ```
 
-# Directory setup
+
 Sets up the directory structure for where to look for data, and where to save results.  
 This assumes that the data structure is what is in the github repo and what is produced by the ImageJ macros. 
-```{r Directories}
+```{r Directories, echo=FALSE}
 output <- c("./OutputData/")
 dir.create(output, showWarnings = FALSE)
 metadataDir <- c("./ProcessedData/Metadata")
@@ -24,7 +26,7 @@ writeLines(capture.output(sessionInfo()),
            paste(output,"/RCrunching-sessionInfo.txt", sep = ""))
 ```
 
-# Run Metadata 
+## Run Metadata 
 ```{r Metadata}
 arrayList <- c("A1", "A2", "A3")
 ampFluor <- "FAM"; wtFluor <- "Cy5"; mutFluor <- "HEX"
@@ -49,7 +51,7 @@ names(allFluors)[names(allFluors) == "X.Area"] <- "Area"
 rm(dataList)
 ```
 
-#Calculate AID
+## Calculate AID
 Note: Area is divided by Max % Fill per ROI, which has already been calculated 
 for this master/array design as 9 pixels by 17 pixels, and ROI grid is 400 pixels, 
 so the max % Fill per ROI is 38.25%
@@ -62,18 +64,10 @@ allFluors$Array[allFluors$Well > 2*wellTotal] <- "A3"
 allFluors$AID <- allFluors$IntDen/(allFluors$Area/38.25)
 allFluors$Fluor <- factor(allFluors$Fluor, levels = fluorList)
 allFluors$Array <- factor(allFluors$Array)
-
-```
-
-Specify which type of template is in each of the arrays.  
-```{r}
-#pSch = "PSwap"
-#allFluors$Scheme <- pSch
 allFluors <- allFluors %>% mutate(Template = "OCI-AML3")
 ```
 
-
-Data formatting to generate a "spread" format for further analysis.  
+## Data formatting to generate a "spread" format for further analysis.  
 Uses the area calculated in the ampFluor channel as the true Area from here on out.
 ```{r}
 procData <- allFluors[c("Well", "Fluor", "Array", "AID")]
@@ -92,7 +86,7 @@ primeTime$ArrayCol <- seq(1:64)
 rm(procData, ampArea, wideForm)
 ```
 
-Fill Thresholding
+## Fill Thresholding
 Plot data as a function of area in order to visualize the area threshold for 
 identifying which wells "filled" and which did not prior to downstream gating.
 
@@ -111,6 +105,7 @@ Apply one area threshold to the data frame for all arrays and generate a new
 ruleThemAll <- primeTime %>% group_by(Array) %>% mutate(Filled = Area > tArea)
 ```
 
+## HEX Correction and Thresholding
 Set the constant used to correct for FAM bleed-through in the HEX channel.  This value was calcuated based on the average of several runs of mutant plasmids.
 ```{r HEX Correction}
 avgHEXSlope <- 0.46
@@ -154,11 +149,8 @@ mutAdjPeaks <- snowCone %>% gather(Fluor, AID, ampFluor:mutFluorAdj) %>%
 snowPeaksAdj <- bind_rows(snowPeaks, mutAdjPeaks)
 ```
 
-
-EITHER Calculate thresholds using method 1: using previously determined maxSD of negative controls
-```{r calculate thresholds Method 1}
-#Max SD's x multiplier for each probe from negative templates (NTC or off-target plasmid).  
-#change multiplier (xsigamp/mut/wt) to the x sigma you want to use for thresholding.  maxAID + xsig*sigma.
+Calculate thresholds using previously determined maxSD of negative controls
+```{r calculate thresholds}
 xsigamp <- 3
 xsigmut <- 6
 xsigwt <- 5
@@ -180,7 +172,7 @@ snowCone1 <- left_join(snowCone, snowDrift1, by = c("Array"))
 
 ```
 
-Visualize amp thresholds to spot errors
+Visualize amplification thresholds to spot errors
 ```{r view amp thresh}
 ampThreshPlot <- ggplot(snowCone1 %>% filter(Filled == TRUE), aes(x=ampFluor)) + 
                             geom_histogram(aes(x = ampFluor, y = ..density..), bins = 20) +
@@ -213,7 +205,7 @@ mutAdj_vs_wt_Scatter
 ```
 
 Save a .jpeg of the mut vs. wt scatter plots
-```{r save plots}
+```{r save plots, messages=FALSE}
 ggsave(mutAdj_vs_wt_Scatter, filename = paste0(output,"mutAdj_vs_wt_Scatter.jpeg"))
 ```
 
@@ -266,7 +258,7 @@ snowCone3 <- snowCone3 %>% mutate(FluorQC = replace(FluorQC, Filled == TRUE & Am
                      wtFluor < wtThresh & mutFluorAdj < mutAdjThresh, "Negative"))
 ```
 
-PSwap
+## Plot Zygosity Results
 Plot mut vs. wt with Zygosity
 ```{r View Results of wt and mut Thresholding}
 FinalZygosity_PSwap <- ggplot(snowCone3 %>% filter(Filled ==TRUE, AmpPos == TRUE | FluorQC == "Negative"), 
@@ -286,11 +278,11 @@ FinalZygosity_PSwap
 ```
 
 Save a .jpeg of the mut vs. wt Zygosity and FluorQC scatter plots
-```{r save box plots}
-ggsave(FinalZygosity_PSwap, filename = paste0(output,"/", runDate, "FinalZygosity_PSwap.jpeg"))
+```{r save scatter plots, messages=FALSE}
+ggsave(FinalZygosity_PSwap, filename = paste0(output, "FinalZygosity_PSwap.jpeg"))
 ```
 
-###Cell Calculations
+## Cell Calculations
 
 Read In Cell Data
 ```{r Read in Cell Data}
@@ -321,10 +313,6 @@ lookup <- arrange(lookup, Array, ArrayRow, ArrayCol)
 lookup$Well <- seq(1:3072)
 fullMergeData <- join(lookup, cellMelt, by = "ROIorder", type = "left")
 cellsReadyToRoll <- select(fullMergeData, Well, cellCount)
-```
-
-Melt the individual run CellOutputData together to make snowConeCells
-```{r going on a bear hunt}
 snowCone4 <- left_join(snowCone3, cellsReadyToRoll, by = c("Well"))
 ```
 
@@ -349,13 +337,13 @@ zygBarPlot
 ```
 
 Save the zygosity plot
-```{r Save zygBarPlot and dropoutTable}
+```{r Save zygBarPlot and dropoutTable, messages=FALSE}
 ggsave(paste0(output, "zygBarPlot-singleCells.jpg"),
        zygBarPlot,
        width = 6, height = 6)
 ```
 
-Failure rate calulations
+## Failure rate calulations
 ```{r Failure Rates}
 failureData <- snowCone4 %>% group_by( Array, Template) %>%
     summarise(FalsePositives = n_distinct(which(Filled == TRUE & AmpPos == TRUE & cellCount == 0)),
@@ -383,18 +371,18 @@ failurePlot
 ```
 
 save plot
-```{r Save failure Plot}
+```{r Save failure Plot, messages=FALSE}
 ggsave(paste0(output, "failurePlot.jpg"),
        failurePlot,
        width = 6, height = 6)
 ```
 
 save csv
-```{r Save stats data}
+```{r Save stats data, messages=FALSE}
 write.csv(failureData, file = paste0(output,"failureRateResults.csv"), row.names = F)
 ```
 
-Poisson Distribution calculations
+## Poisson Distribution calculations
 ```{r Poisson Calculations}
 experimentalLambda <- snowCone4 %>% group_by(Array,Template) %>%
     summarise(TotalCounts =   n_distinct(which(Filled == TRUE)),
@@ -446,21 +434,21 @@ PoissonSummaryPlot
 ```
 
 Save a .jpeg of the Poisson plots
-```{r save box plots}
+```{r save Poisson plots, messages=FALSE}
 ggsave(PoissonFit, filename = paste0(output,"PoissonFit.jpeg"))
 ggsave(PoissonSummaryPlot, filename = paste0(output,"PoissonSummaryPlot.jpeg"))
 ggsave(CellCountPlot, filename = paste0(output,"CellCountPlot.jpeg"))
 ```
 
 Save csv's of cell count distribution data
-```{r Save Poisson data}
+```{r Save Poisson data, messages=FALSE}
 write.csv(experimentalLambda, file = paste0(output,"poissionEstimateResults.csv"), row.names = F)
 write.csv(PoissonFull, file = paste0(output,"PoissonFull.csv"), row.names = F)
 write.csv(PoissonSummary, file = paste0(output,"PoissonSummary.csv"), row.names = F)
 ```
 
 Save the final data frame
-```{r write out cellsnowCone}
+```{r write out cellsnowCone, messages=FALSE}
 write.csv(snowCone4, file = paste0(output,"cellsnowCone.csv"), row.names = F)
 ```
 

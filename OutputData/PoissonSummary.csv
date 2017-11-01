@@ -1,0 +1,7 @@
+"Origin","Occupancy","Counts"
+"Actual","DoubletPlus",86
+"Actual","OneCell",325
+"Actual","ZeroCells",1737
+"Predicted","DoubletPlus",42.445780066151
+"Predicted","OneCell",368.554219933849
+"Predicted","ZeroCells",1737

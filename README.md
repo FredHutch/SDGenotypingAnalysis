@@ -2,22 +2,22 @@
 
 ## Repo Structure:
 
-### [Typhoon Image Analysis](https://github.com/)
+### [Typhoon Image Analysis](https://github.com/FredHutch/SDGenotypingAnalysis/tree/master/TyphoonImageAnalysis)
  Contains scripts for determining well fluorescence for each fluorophore
 
   - TyphoonCrop: Prepares raw images for analysis, including identifying and performing necessary rotation and crop
   - AnalyzeFluorescence: Analyzes the fluorescence per well of the images modified by TyphoonCrop
 
-### [Olympus Imaging Analysis](https://github.com/)
-Contains scripts for determining cell counts in each well from images taken via an Olympus scope with an automated stage
+### [Olympus Imaging Analysis](https://github.com/FredHutch/SDGenotypingAnalysis/tree/master/OlympusImagingAnalysis)
+Contains scripts for determining cell counts in each well from images taken before PCR via an Olympus microscope with an automated stage
 
   - alignOlympusImages:  Prepares raw images for analysis
   - analyzeOlympus:  Analyze the number of cells per well
 
-### [Raw Data](https://github.com/)
+### [Raw Data](https://github.com/FredHutch/SDGenotypingAnalysis/tree/master/RawData)
 Contains an example data set used in our publication
 
-### [Processed Data](https://github.com/)
+### [Processed Data](https://github.com/FredHutch/SDGenotypingAnalysis/tree/master/ProcessedData)
 Contains all processed data from an example analysis of this data set as described in our publication.
 
 # Before running any analysis:
@@ -50,7 +50,7 @@ If this is your first time analyzing these data on this computer, do the followi
 
 
 ## ImageJ Analysis Details
-### TyphoonCrop.txt
+### [TyphoonCrop.txt](https://github.com/FredHutch/SDGenotypingAnalysis/blob/master/TyphoonImageAnalysis/TyphoonCrop.txt)
   - Rotates, crops and linearizes the .gel files (raw data).
   - Values for the specific scan to be analyzed will need to be set for the following variables in this macro due to placement of the arrays on the Typhoon scanner being different every time.  These variables will set the rotation angle required to orient the image for downstream processing (array 1, the first array filled always on the top, and inlets on the left), and the size of the crop area for the image stack.  
   - Run-specific Variables to be set:
@@ -59,7 +59,7 @@ If this is your first time analyzing these data on this computer, do the followi
     - yStart
   - This will create a set of rotated and cropped images in a directory in ProcessedData called "TyphoonImages" and save metadata about the process in the Metadata directory.  
 
-### AnalyzeFluorescence.txt
+### [AnalyzeFluorescence.txt](https://github.com/FredHutch/SDGenotypingAnalysis/blob/master/TyphoonImageAnalysis/AnalyzeFluorescence.txt)
   - Thresholds the images based on the probes listed in "runInfo.txt".
   - Overlays a Region of Interest grid based on user input via dialog boxes.
   - Measures %Area and Integrated Density of each region of interest.
@@ -78,7 +78,7 @@ If this is your first time analyzing these data on this computer, do the followi
   - Save metadata to the Metadata folder in ProcessedData.
 
 
-### alignOlympusImages.txt
+### [alignOlympusImages.txt](https://github.com/FredHutch/SDGenotypingAnalysis/blob/master/OlympusImagingAnalysis/alignOlympusImages.txt)
   - Calls the findRotation and findCrop functions on an image set.
   - Saves to results folder.
   - Creates its output folder (./ProcessedData/OlympusImages).
@@ -92,13 +92,13 @@ For each image in ./RawData/OlympusImages, the following processes occur:
   - Determines two uniform top boundaries, one each for images in the lower and upper halves of the array
   - Applies each image's left and right crops, as well as the consensus top crop for images in its half (upper/lower) of the array
   - Outputs a rotated and cropped image.  These images will be used by analyzeOlympus.txt
-  
+
 ##### Olympus imaging order and numbering scheme per array:
 	 1   2   3   4   5   6  
 	12  11  10   9   8   7
 
 
-### analyzeOlympus.txt
+### [analyzeOlympus.txt](https://github.com/FredHutch/SDGenotypingAnalysis/blob/master/OlympusImagingAnalysis/analyzeOlympus.txt)
  - Calls the roiGrid and countCells functions on an image set.
  - Saves to results folder.
  - Creates its output folder (./ProcessedData/OlympusCSVs).
