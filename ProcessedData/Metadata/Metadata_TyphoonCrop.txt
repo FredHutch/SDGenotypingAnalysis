@@ -1,0 +1,8 @@
+TyphoonCrop Metadata:
+     Script:  /Users/apaguirigan/GitRepos/SDChipImageAnalysis/TyphoonImageAnalysis/TyphoonCrop.txt
+     Run Time:  20171023-1518
+     rotationAngle:  -2.5
+     xStart:  557
+     yStart:  3422
+     cropwidth:  1020
+     cropheight:  1806

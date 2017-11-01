@@ -1,0 +1,18 @@
+Array 1 calculated rotation values:
+0.0853, -1.7047, -0.1705, 0, -0.0853, -0.0853, 0.0853, 0.0853, -0.0853, 0.0853, 0.2558, 0.1705
+Array 1 applied rotation value: 0.01066
+Array 1 images 1-6 top crop: 183
+Array 1 images 7-12 top crop: 48
+ 
+Array 2 calculated rotation values:
+-0.2558, -0.2558, -0.3410, -0.2558, -0.2558, 1.4491, -0.2558, -0.1705, -0.1705, -0.1705, -0.0853, -0.1705
+Array 2 applied rotation value: -0.2132
+Array 2 images 1-6 top crop: 190
+Array 2 images 7-12 top crop: 58
+ 
+Array 3 calculated rotation values:
+-0.3410, -0.2558, -0.2558, -0.2558, -0.2558, -0.0853, 0, 0.2558, -0.0853, -0.0853, 0, -0.1705
+Array 3 applied rotation value: -0.1492
+Array 3 images 1-6 top crop: 195
+Array 3 images 7-12 top crop: 59
+ 

@@ -1,0 +1,440 @@
+// This script uniformly rotates and crops Olympus images for use by analyzeOlympus.  It looks at runInfo and determines which arrays need to be analyzed for cell counts.  It also reports the list of images for each array
+
+// This script uses the 12-image scan layout for each array:
+//    1   2   3   4  5  6
+//   12  11   10  9  8  7
+// Each image has 8 rows and 11 columns, except for 6 and 7 which have 9 columns
+
+
+// Define the iteration parameter
+imagesPerArray = 12;
+
+// Clean up the Log for Metadata purposes
+print("\\Clear");
+
+// Determine the OS for directory pathing purposes.  Windows uses "\", while other operating systems use "/"
+slash = "/";
+sysType = getInfo("os.name");
+if (indexOf(sysType, "Windows") != -1) {
+	slash = "\\";
+}
+
+// Store the name of this script for later.  The built-in "getInfo" function can only operate on the last macro run, so we need to call it ASAP
+thisPath = getInfo("macro.filepath");
+splitPath = split(thisPath, slash);
+thisScript = splitPath[splitPath.length-1];
+
+// Define this script's directory and its parent
+scriptHome = File.getParent(getInfo("macro.filepath")) + slash;
+scriptParent = File.getParent(scriptHome) + slash;
+
+// Define the raw images' locations and their output folder
+imageHome = scriptParent + "RawData" + slash + "OlympusImages" + slash;
+imageOutput = scriptParent + "ProcessedData" + slash + "OlympusImages" + slash;
+File.makeDirectory(imageOutput);
+metadataOutput = scriptParent + "ProcessedData" + slash + "Metadata" + slash;
+
+
+// Open runInfo.txt
+runInfo = File.openAsString(scriptParent + "ProcessedData" + slash + "TyphoonImages" + slash + "runInfo.txt");
+byLines = split(runInfo, "\n");
+
+
+// Find lines of runInfo.txt file containing "chip".  There should just be one
+for (i = 0; i < byLines.length; i++) {
+	if (indexOf(byLines[i], "chip") >= 0) {
+		chipLine = i;
+	}
+}
+
+// Search the lines after "chip" in runInfo.txt for names of cell lines we ran on-chip.  These are the only arrays that will need Olympus analysis, though 36 images will be acquired no matter what.  The three lines after "chip" describe the probe scheme, so those get skipped
+cellArrays = newArray(0, 0, 0);
+for (i = 0; i < cellArrays.length; i++) {
+	if (indexOf(byLines[chipLine+i+4], "OCI") >= 0 ||
+		indexOf(byLines[chipLine+i+4], "KG1a") >= 0) {
+		cellArrays[i] = 1;
+	}
+}
+
+
+// Get the list of files in the imageFolder and sort it
+fileList = getFileList(imageHome);
+imageList = newArray(0);
+for (i = 0; i < fileList.length; i++) {
+	if (indexOf(fileList[i], ".tif") >= 0) {
+		imageList = Array.concat(imageList, fileList[i]);
+	}
+}
+sortedImageList = Array.sort(imageList);
+
+
+// Open the flatfield image.  This will be applied at the very end because the non-flatfielded images have extra fluorescence in the middle, where it won't through off the edge-detecting rotation and cropping functions
+// This assumes the flatfield image lives in the RawData folder
+open(scriptParent + "RawData" + slash + "flat-field-zoom125-D100.tif");
+
+
+// Rotate the image 90 degrees to the left so the array is oriented correctly.  We have to enlarge the image because it's not square, and the rectangle and crop lines of code remove the artifact black bars created by enlarge-rotation
+oldHeight = getHeight();
+run("Rotate... ", "angle=-90 grid=1 interpolation=Bilinear enlarge");
+imgWidth = getWidth();
+imgHeight = getHeight();
+makeRectangle((imgWidth-oldHeight)/2, 0, oldHeight, imgHeight);
+run("Crop");
+
+
+
+// This function reports the pixel intensity that leads to a percent cutoff for the threshold.  For example, if you run it with 0.80, it finds the pixel intensity value that is at the 80th percentile
+function percentileThreshold(percentile) {
+	width = getWidth();
+	height = getHeight();
+	ThresholdArray = newArray(width*height);
+	q = 0;
+	
+	//  Get each pixel value and add it to an array
+	for (y = 0; y < height; y++) {
+		for (x = 0; x < width; x++) {
+			ThresholdArray[q++] = getPixel(x,y); 
+		}
+	}
+	
+	// Sort the array
+	Array.sort(ThresholdArray);
+	length = lengthOf(ThresholdArray);
+	
+	// Find the entry at the percentile-th location along the array and return its value
+	index = floor(percentile * length);
+	indexIntensity = ThresholdArray[index];
+	return(indexIntensity);
+}
+
+
+// This function, only used by cropOlympus, reports the percentage of pixels along a line that are above the current "lowerlimit" value
+function lineValsAboveTh(x0, y0, x1, y1) {
+	makeLine(x0, y0, x1, y1);
+	profile = getProfile();
+	limitArray = newArray();
+
+	// Find the number of pixels along this line that are above the threshold determined by percentileThreshold and compare it to the length of the line
+	for (j = 0; j < profile.length; j++) {
+		if (profile[j] > lowerlimit) {
+			limitArray = Array.concat(limitArray, profile[j]);
+		}
+	}
+	plotlength = lengthOf(profile);
+	limitlength = lengthOf(limitArray);
+	percentlength = limitlength/plotlength;
+	return(percentlength);
+}
+
+
+// This function rotates the Olympus image whose number is passed to it
+function findRotation(imgNum) {
+	
+// Rotate the image 90 degrees to the left so the array is oriented correctly. We have to enlarge the image because it's not square, and the rectangle and crop lines of code remove the artifact black bars created by enlarge-rotation
+	oldHeight = getHeight();
+	run("Rotate... ", "angle=-90 grid=1 interpolation=Bilinear enlarge");
+	imgWidth = getWidth();
+	imgHeight = getHeight();
+	makeRectangle((imgWidth-oldHeight)/2, 0, oldHeight, imgHeight);
+	run("Crop");
+	
+	// Call percentileThreshold, set it for visual assistance, and define the sensitivity of your rotation scan
+	lowerlimit = percentileThreshold(0.825);
+	upperlimit = percentileThreshold(0.999);
+	setThreshold(lowerlimit, upperlimit);
+	percentlimit = 0.03;
+	
+	// Define some scanning parameters and set the optimal angle and distance to 0 to ensure they're modified later
+	scansize = 250;
+	angleoffset = 25;
+	imgWidth = getWidth();
+	imgHeight = getHeight();
+	bestAngle = 0;
+	bestDistance = 0;
+	
+	// For each possible rotation angle...
+	for (i = (0 - angleoffset); i < angleoffset; i++) {
+	// Assume we're intersecting with some wells.  We want the scan loop to break at the START of a column of wells.
+		darkSweep = 0;
+	
+	// Scanning in one-pixel increments...
+		for (j = 0; j < scansize; j++) {
+			run("Clear Results");
+			limitArray = newArray();
+		
+		// Make a line based on angle offset and scansize.  For images on the far right end of the array, we want to make this line on the left-hand side so that calculations are performed closer to the middle of the array.  The last few columns occasionally have poor fills, which would cause this to break if the scan were performed on the right.
+			if (imgNum == 5 || imgNum == 6) {
+				makeLine(j-i, 0, j+i, imgHeight);
+			} else {
+				makeLine(imgWidth-j-i, 0, imgWidth-j+i, imgHeight);
+			}
+			
+			// Get information about the pixels on this line
+			run("Measure");
+			angle = getResult("Angle", 0);
+			run("Clear Results");
+			profile = getProfile();
+
+		// Find the number of pixels along this line that are above the threshold determined by percentileThreshold and compare it to the line length
+			for (k = 0; k < profile.length; k++) {
+				if (profile[k] > lowerlimit) {
+					limitArray = Array.concat(limitArray, profile[k]);
+				}
+			}
+			plotlength = lengthOf(profile);
+			limitlength = lengthOf(limitArray);
+			percentlength = limitlength/plotlength;
+
+		// If the percent of pixels above the threshold value is less than our sensitivity limit, the line is in a dark region before wells
+			if (percentlength < percentlimit) {
+				darkSweep = 1;
+				darkStart = j;
+			}
+
+		// If the percent of pixels above the threshold value is greater than our sensitivity limit AND we were previously between wells, the line has arrived at a column of wells.  The best angle will be the one that had the largest scan before coming across a well column
+			if (percentlength > percentlimit && darkSweep == 1) {
+				if (j > bestDistance) {
+					bestDistance = j;
+					bestAngle = angle+90;      // Vertical line is -90
+				}
+			
+			// Break the scan now that we've arrived at a well column, regardless of whether we found a new best value
+				j = scansize;
+			}
+		}
+	}
+	
+	// Return the best angle found for this image
+	setResult("Angle", 0, bestAngle);
+}
+
+
+// This function uses the background well fluorescence to find the outer wells in each image
+function findCrop() {
+	
+	// Call percentileThreshold to define the scan parameters and set the threshold for visual assistance
+	lowerlimit = percentileThreshold(0.80);
+	upperlimit = percentileThreshold(0.999);
+	setThreshold(lowerlimit, upperlimit);
+	percentlimit = 0.15;
+	skipVal = 20;
+	
+	// Define some scanning parameters
+	imgWidth = getWidth();
+	imgHeight = getHeight();
+	scansize = minOf(imgWidth, imgHeight);
+
+
+
+	//	Start on the right side of this image
+	darkSweep = 0;
+	
+	// Scanning in one-pixel increments, starting a little off to the side because there can be a blank space if there was a rotation...
+	for (i = 5; i < scansize; i++) {
+		rightTest = lineValsAboveTh(imgWidth-i, 0, imgWidth-i, imgHeight);
+
+	// If the percent of pixels above the threshold value is less than our sensitivity limit, the line is between or before a well column
+		if (rightTest < percentlimit) {
+			darkSweep = 1;
+		}
+
+	// If the percent of pixels above the threshold value is greater than our sensitivity limit AND the line was previously between wells, it has arrived at a column of wells
+		if (rightTest > percentlimit && darkSweep == 1) {
+	
+		// Check to see if this was an anomaly by skipping ahead a few pixels.  Sometimes the edge of a coverslip, oil channel or outlet shows up
+			skipTest = lineValsAboveTh(imgWidth-i-skipVal, 0, imgWidth-i-skipVal, imgHeight);
+		
+		// If the skipTest is still positive, we found a well column after all
+			if (skipTest > percentlimit) {
+				rightBound = i-5;
+				i = scansize;
+			}
+		}
+	}
+	
+	
+	
+	// Now test the left side of the image
+	darkSweep = 0;
+
+	// Scanning in one-pixel increments, starting a little off to the side because there can be a blank space if there was a rotation...
+	for (i = 5; i < scansize; i++) {
+		leftTest = lineValsAboveTh(i, 0, i, imgHeight);
+
+	// If the percent of pixels above the threshold value is less than our sensitivity limit, the line is between or before a well column
+		if (leftTest < percentlimit) {
+			darkSweep = 1;
+		}
+
+	// If the percent of pixels above the threshold value is greater than our sensitivity limit AND the line was previously between wells, it has arrived at a column of wells.  The best angle will be the one that had the largest scan before coming across a well column
+		if (leftTest > percentlimit && darkSweep == 1) {
+		
+		// Check to see if this was an anomaly by skipping ahead a few pixels
+			skipTest = lineValsAboveTh(i+skipVal, 0, i+skipVal, imgHeight);
+		
+		// If the skipTest is still positive, we found a well column after all
+			if (skipTest > percentlimit) {
+				leftBound = i-5;
+				i = scansize;
+			}
+		}
+	}
+	
+	
+	// Do the same for the top
+	darkSweep = 0;
+
+// Scanning in one-pixel increments, starting a little off from the top because there can be a blank space if there was a rotation...
+	for (i = 5; i < scansize; i++) {
+		topTest = lineValsAboveTh(0, i,imgWidth, i);
+		
+	// If the percent of pixels above the threshold value is less than our sensitivity limit, the line is between or before a well column
+		if (topTest < percentlimit) {
+			darkSweep = 1;
+		}
+
+	// If the percent of pixels above the threshold value is greater than our sensitivity limit AND the line was previously between wells, it has arrived at a column of wells.  The best angle will be the one that had the largest scan before coming across a well column
+		if (topTest > percentlimit && darkSweep == 1) {
+	
+		// Check to see if this was an anomaly by skipping ahead a few pixels
+			skipTest = lineValsAboveTh(0, i+skipVal, imgWidth, i+skipVal);
+		
+		// If the skipTest is still positive, we found a well row after all
+			if (skipTest > percentlimit) {
+				topBound = i-5;
+				i = scansize;
+			}
+		}
+	}
+	
+	// Set these values as results for downstream processing and make a rectangle with these dimensions
+	setResult("topBound", 0, topBound);
+	setResult("leftBound", 0, leftBound);
+	setResult("rightBound", 0, rightBound);
+	makeRectangle(leftBound, topBound, imgWidth-rightBound-leftBound, imgHeight-topBound);
+}
+	
+	
+
+
+// For each array on the chip...
+for (i = 0; i < cellArrays.length; i++) {
+
+	// We only want to bother with Olympus images if there are cells in them
+	if (cellArrays[i] != 0) {
+	
+		// Create arrays to store the outputs of findCrop and findRotation
+		topArrayTop = newArray();
+		topArrayBot = newArray();
+		leftArray = newArray();
+		rightArray = newArray();
+		rotationArray = newArray();
+		
+		
+		//	For each image in the array, call the findRotation function and put its calculated value in a list
+		for (j = 0; j < imagesPerArray; j++) {
+			open(imageHome + sortedImageList[imagesPerArray*i+j]);
+			setResult("ImageNumber", 0, j);
+			findRotation(j);
+			rotationArray = Array.concat(rotationArray, getResult("Angle", 0));
+			selectWindow(sortedImageList[imagesPerArray*i+j]);
+			close();
+		}
+		
+		// The rotation should be the same for each image in the same array.  Remove the two largest and two smallest calculated rotation values to remove outlier effects and use the mean value of the remainder to rotate images in that array.  Store all of these values as metadata, both for future use and for transparency
+		print("Array " + (i+1) + " calculated rotation values:");
+		Array.print(rotationArray);
+		rotationArray = Array.sort(rotationArray);
+		rotationArray = Array.slice(rotationArray, 2, rotationArray.length-2);
+		Array.getStatistics(rotationArray, min, max, mean, std);
+		rotationVal = mean;
+		print("Array " + (i+1) + " applied rotation value: " + rotationVal);
+		
+
+		// Open the images in this array
+		for (j = 0; j < imagesPerArray; j++) {
+			open(imageHome + sortedImageList[imagesPerArray*i+j]);
+			
+			// Rotate -90 and adjust for enlargement
+			oldHeight = getHeight();
+			run("Rotate... ", "angle=-90 grid=1 interpolation=Bilinear enlarge");
+			imgWidth = getWidth();
+			imgHeight = getHeight();
+			makeRectangle((imgWidth-oldHeight)/2, 0, oldHeight, imgHeight);
+			run("Crop");
+			
+			// Rotate by the mean calculated rotation value
+			run("Rotate... ", "angle=" + rotationVal + " grid=1 interpolation=Bilinear enlarge");
+			
+			// Call the findCrop function to determine the exterior well rows and columns in this image.  Do NOT crop to these boundaries.  These calculated values only describe the wells that had background fluorescence in this image, and may not be representative of the actual array layout if one or more rows/columns failed to fill
+			findCrop();
+			
+			// Append these values into a list.  We need separate topArrays for the top and bottom halves
+			if (j < imagesPerArray/2) {
+				topArrayTop = Array.concat(topArrayTop, getResult("topBound", 0));
+			} else {
+				topArrayBot = Array.concat(topArrayBot, getResult("topBound", 0));
+			}
+			leftArray = Array.concat(leftArray, getResult("leftBound", 0));
+			rightArray = Array.concat(rightArray, getResult("rightBound", 0));
+			
+			// Save the rotated images
+			selectWindow(sortedImageList[imagesPerArray*i+j]);
+			saveAs("tiff", imageOutput + sortedImageList[imagesPerArray*i+j]);
+			close();
+		}
+		
+		
+		// Look at the array of top crop values for the top row of images and the array of top crop values from the bottom row of images.  The should be relatively consistent, given all of these images are from the same array
+		Array.getStatistics(topArrayTop, min, max, mean, std);
+		minTopValTop = min;
+		Array.getStatistics(topArrayBot, min, max, mean, std);
+		minTopValBot = min;
+		
+		// If the top row or rows fails to fill, minTopValTop will have a value above 250. findCrop will have failed to detect it and instead picked up a row further down the array.  In this case, step back up by the ROIGrid height (100) + the ROIGrid yspacing (44.8) per row skipped
+		if (minTopValTop > 250) {
+			rowsSkipped = round((minTopValTop - 250) / 144.8);
+			minTopValTop = minTopValTop - rowsSkipped*144.8;
+		}
+		
+		// Output these values for the metadata file
+		print("Array " + (i+1) + " images 1-6 top crop: " + minTopValTop);
+		print("Array " + (i+1) + " images 7-12 top crop: " + minTopValBot);
+		print(" ");
+		
+		// Run down the list of images in each array. Draw the rectangle, crop, and save
+		for (j = 0; j < 12; j++) {
+			open(imageOutput + sortedImageList[imagesPerArray*i+j]);
+			rename(sortedImageList[12*i+j]);
+			
+			// Flatfield it!
+			imageCalculator("Divide", sortedImageList[imagesPerArray*i+j], "flat-field-zoom125-D100.tif");
+			
+			// Draw the bounding box based on whether it's in the upper or lower set of images for that array
+			if (j < imagesPerArray/2) {
+	 			makeRectangle(leftArray[j], minTopValTop, imgWidth - leftArray[j] - rightArray[j], imgHeight - minTopValTop);
+	 		} else {
+	 			makeRectangle(leftArray[j], minTopValBot, imgWidth - leftArray[j] - rightArray[j], imgHeight - minTopValBot);
+	 		}
+	 		
+	 		// Crop and save
+	 		run("Crop");
+	 		saveAs("tiff", imageOutput + sortedImageList[imagesPerArray*i+j]);
+	 		close();
+	 	}
+	}
+}
+
+
+	
+
+// Create Metadata and save it to the Metadata folder created by Typhoon scripts
+selectWindow("Log");
+saveAs("Text", metadataOutput + "Metadata_" + thisScript);
+
+
+// Clean up and call analyzeOlympus
+print("\\Clear");
+run("Clear Results");
+run("Close All");
+runMacro(scriptHome + "analyzeOlympus.txt");

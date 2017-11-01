@@ -1,0 +1,16 @@
+Name: amthomps_080917_01
+speed/sensitivity: sensitivity
+pixel size: 25um
+focal plane: 3mm
+slides: 2 per side
+1: 520bp 40/488/Norm/500V
+2: 555bp 20/532/Norm/600V
+3: 670bp 30/633/Norm/600V
+scan time: 0:45
+chipb: probe swap
+B_FAM=NPM1-LNA-AmpControl-FAM
+B_HEX=NPM1-LNA-MUT-A-HEX
+B_Cy5=NPM1-LNA-WT-Cy5
+array1b: OCI-AML3
+array2b: OCI-AML3
+array3b: OCI-AML3

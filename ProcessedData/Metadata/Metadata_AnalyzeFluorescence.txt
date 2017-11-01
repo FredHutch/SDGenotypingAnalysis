@@ -1,0 +1,27 @@
+TyphoonCrop Metadata:
+     Script:  /Users/apaguirigan/GitRepos/SDChipImageAnalysis/TyphoonImageAnalysis/TyphoonCrop.txt
+     Run Time:  20171023-1518
+     rotationAngle:  -2.5
+     xStart:  557
+     yStart:  3422
+     cropwidth:  1020
+     cropheight:  1806
+AnalyzeFluorescence.txt Metadata:
+     Script: AnalyzeFluorescence.txt
+     FAM Threshold: 2000
+     HEX Threshold: 1500
+     Cy5 Threshold: 1000
+     Chip: chipb: probe swap
+     Probe 1: B_FAM=NPM1-LNA-AmpControl-FAM
+     Probe 2: B_HEX=NPM1-LNA-MUT-A-HEX
+     Probe 3: B_Cy5=NPM1-LNA-WT-Cy5
+     ROI Grids:
+                             Cy5     HEX     FAM
+        X:                   19       19      19
+        Y:                   14       14      14
+        Width:              15.42   15.42   15.42
+        Height:             24.73   24.73   24.73
+        arrayspacing:        273     273     273
+        numArrays:           3        3       3
+        numRow:              16       16      16
+        numCol:              64       64      64

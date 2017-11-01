@@ -1,0 +1,318 @@
+// This script analyzes the fluorescence of Typhoon images that have been pre-processed by TyphoonCrop.txt.  Each chip has three arrays, and each array has three superimposable images in the three fluorophore channels
+
+
+// Determine parameters for the ImageJ "Measure" function
+run("Set Measurements...", "area area_fraction integrated redirect=None");
+
+
+// Determine the OS for directory pathing purposes.  Windows uses "\", while other operating systems use "/"
+sysType = getInfo("os.name");
+slash = "/";
+if (indexOf(sysType, "Windows") != -1) {
+	slash = "\\";
+}
+
+
+// Store the name of this script for later.  The built-in "getInfo" function can only operate on the last macro run, so we need to call it ASAP
+thisPath = getInfo("macro.filepath");
+splitPath = split(thisPath, slash);
+thisScript = splitPath[splitPath.length-1];
+
+
+
+// Define this script's directory and its parent
+scriptHome = File.getParent(getInfo("macro.filepath")) + slash;
+scriptParent = File.getParent(scriptHome) + slash;
+
+
+// Define input and output directories based on the script's location
+input = scriptParent + "ProcessedData" + slash + "TyphoonImages" + slash;
+metadataOutput = scriptParent + "ProcessedData" + slash + "Metadata" + slash;
+csvOutput = scriptParent + "ProcessedData" + slash + "TyphoonCSVs" + slash;
+
+// Create the csvOutput, which doesn't exist yet
+File.makeDirectory(csvOutput);
+
+
+// Look at the files in the input directory and assign them to variables based on their fluorescence channel
+list = getFileList(input);
+for (i = 0; i < list.length; i++) {
+	if (indexOf(list[i], "FAM") >= 0) {
+		FAMimage = list[i];
+	} else if (indexOf(list[i], "Cy5") >= 0) {
+		Cy5image = list[i];
+	} else if (indexOf(list[i], "HEX") >= 0) {
+		HEXimage = list[i];
+	}
+}
+
+
+// This function creates a binary mask for each image based on the fluorescence channel in which that image was acquired
+function makeMask(fluor, fluorimage, threshold) {
+	// Create a mask based on the supplied threshold
+	setAutoThreshold("Default dark");
+	setThreshold(0, threshold);
+	run("Select All");
+	run("Create Mask");
+	
+	// Close and re-open the image to remove the applied threshold
+	selectWindow(fluorimage);
+	close();
+	open(input + fluorimage);
+	setThreshold(0, 65535);
+
+
+	// Use Divide to create a 16-bit version of your mask.  "create" puts the result in a new window
+	imageCalculator("Divide create", fluorimage, "mask");
+	
+	// The produced mask is inverted, so correct that and rename it for downstream purposes
+	selectWindow("Result of " + fluorimage);
+	run("Invert");
+	rename(fluor + " Mask");
+	
+	// Empty the Results window so the threshold can be passed to another function for metadata
+	run("Clear Results");
+	setResult("Threshold", 0, threshold);
+}
+
+
+// These threshold values are unique to the probes in this scheme
+FAMthreshold = 2000;
+HEXthreshold = 1500;
+Cy5threshold = 1000;
+
+
+//	Define x, y, width, height, arraySpacing, numArrays, numRow, numCol for the roiGrid function.  These are the values we used when analyzing these chips
+roiArrayFAM = newArray(19, 14, 15.42, 24.73, 273, 3, 16, 64);
+roiArrayHEX = newArray(19, 14, 15.42, 24.73, 273, 3, 16, 64);
+roiArrayCy5 = newArray(19, 14, 15.42, 24.73, 273, 3, 16, 64);
+
+
+// This function draws a 16x64 grid of rectangles for each array that it adds to the ROI manager
+function roiGrid(roiArray) {
+
+	// Set ROI grid values by the input array's values
+	x = roiArray[0];
+	y = roiArray[1];
+	width = roiArray[2];
+	height = roiArray[3];
+	arrayspacing = roiArray[4];
+	numArrays = roiArray[5];
+	numRow = roiArray[6];
+	numCol = roiArray[7];
+	
+	roiManager("reset");
+	
+	
+	// Draw the ROI Grid
+	// For each array...
+	for (k = 0; k < numArrays; k++) {
+		// For each row...
+		for (i = 0; i < numRow; i++) {
+			// For each column...
+			for (j = 0; j < numCol; j++) {
+				// Make rectangles for the ROI Manager based on initial values and the row/column/array values
+				xOffset = j * width;
+				yOffset = i * height + (arrayspacing + height*(numRow+1)) * k;
+				makeRectangle(x + xOffset, y + yOffset, width, height);
+				roiManager("Add");
+			}	
+		}
+	}
+	
+	// Make the ROI grid easily visible
+	roiManager("Set Color", "red");
+	roiManager("Show All");
+}
+
+
+// This function analyzes the fluorescence of a single image
+function analyze(input, output, filename, fluor, threshold) {
+	selectWindow(filename);
+	run("Clear Results");
+	
+	// Call ImageJ's Measure function, which had its parameters set at the beginning of the script.  This function is called separately on each item in the ROI Manager
+	id = getImageID();
+	for (j=0 ; j<roiManager("count"); j++) {
+    		selectImage(id);
+    		roiManager("select", j);
+    		run("Measure");
+	}
+
+
+	// For some of the measurements, more data types are supplied than we need for each well, such as the pixel count in each well which is uniform and therefore does not need to be a column of our CSV.  This section fills arrays with the values we want, clears the Results tab and re-populates it so that only the important parameters are saved to a CSV
+	nWells = roiManager("count");
+	
+	// Create arrays to store %Area and Integrated Density
+	areafraction_list = newArray(nWells);
+	integrated_list = newArray(nWells);
+	
+	// Populate lists from Results
+	for (k=0; k<nWells; k++) {
+		integrated_list[k] = getResult("IntDen", k);
+		areafraction_list[k] = getResult("%Area", k);
+	}
+	run("Clear Results");
+	
+	// Create the new results table from the lists
+	for (k=0; k<integrated_list.length; k++) {
+		setResult("%Area", k, areafraction_list[k]);
+		setResult("IntDen", k, integrated_list[k]);
+	}
+	updateResults();
+	
+	// Save the freshly-populated Results to a CSV
+	savename = split(filename, ".");
+	saveAs("Results", output + savename[0] + "_T" + threshold + ".csv");
+	run("Clear Results");
+}
+	
+	
+	
+
+
+// Open Cy5 image
+fluor = "Cy5";
+open(input + Cy5image);
+selectWindow(Cy5image);
+
+// Make Cy5 mask
+makeMask("Cy5", Cy5image, Cy5threshold);
+
+// Store the threshold value that was passed from "makeMask"
+threshold = getResult("Threshold", 0);
+run("Clear Results");
+
+// Subtract the mask
+imageCalculator("Subtract", Cy5image, fluor + " Mask");
+selectWindow("mask");
+close();
+
+// Analyze mask-subtracted Cy5 image
+selectWindow(Cy5image);
+roiGrid(roiArrayCy5);
+analyze(input, csvOutput, Cy5image, fluor, Cy5threshold);
+
+// Close the image and its mask
+selectWindow(Cy5image);
+close();
+selectWindow("Cy5 Mask");
+close();
+
+
+
+
+// Open HEX image
+fluor = "HEX";
+open(input + HEXimage);
+selectWindow(HEXimage);
+
+// Make HEX mask
+makeMask("HEX", HEXimage, HEXthreshold);
+
+// Store the threshold value that was passed from "makeMask"
+threshold = getResult("Threshold", 0);
+run("Clear Results");
+
+// Subtract the mask
+imageCalculator("Subtract", HEXimage, fluor + " Mask");
+selectWindow("mask");
+close();
+
+// Analyze mask-subtracted HEX image
+selectWindow(HEXimage);
+roiGrid(roiArrayHEX);
+analyze(input, csvOutput, HEXimage, fluor, HEXthreshold);
+
+// Close the image and its mask
+selectWindow(HEXimage);
+close();
+selectWindow("HEX Mask");
+close();
+
+
+
+
+// Open FAM image
+open(input + FAMimage);
+fluor = "FAM";
+selectWindow(FAMimage);
+
+// Make FAM mask
+makeMask("FAM", FAMimage, FAMthreshold);
+
+// Store the threshold value that was passed from "makeMask"
+threshold = getResult("Threshold", 0);
+run("Clear Results");
+
+// Subtract the mask
+imageCalculator("Subtract", FAMimage, fluor + " Mask");
+selectWindow("mask");
+close();
+
+// Analyze mask-subtracted FAM image
+selectWindow(FAMimage);
+roiGrid(roiArrayHEX);
+analyze(input, csvOutput, FAMimage, fluor, FAMthreshold);
+
+// Close the image and its mask
+selectWindow(FAMimage);
+close();
+selectWindow("FAM Mask");
+close();
+
+
+
+// Open the run-specific info .txt file and split it by line
+infoTXT = File.openAsString(input + "runInfo.txt");
+byLines = split(infoTXT, "\n");
+
+// Identify lines that contain "chip" in them
+chipLines = newArray(0);
+for (i = 0; i < byLines.length; i++) {
+	if (indexOf(byLines[i], "chip") >= 0) {
+		chipLines = Array.concat(chipLines, byLines[i]);
+		chiptoAnalyze = i;
+	}
+}
+
+// There should only be one chip by this point
+if (chipLines.length != 1) {
+	exit("Something went wrong with the chip selection process");
+}
+
+// Create an array of the chip name and the following lines (the probes)
+probeLines = Array.concat(byLines[chiptoAnalyze], byLines[chiptoAnalyze+1], byLines[chiptoAnalyze+2], byLines[chiptoAnalyze+3]);
+
+
+// Print things to save as a text file
+print(thisScript + " Metadata:");
+print("     Script: " + thisScript);
+print("     FAM Threshold: " + FAMthreshold);
+print("     HEX Threshold: " + HEXthreshold);
+print("     Cy5 Threshold: " + Cy5threshold);
+print("     Chip: " + probeLines[0]);
+print("     Probe 1: " + probeLines[1]);
+print("     Probe 2: " + probeLines[2]);
+print("     Probe 3: " + probeLines[3]);
+
+// This section is a table of ROI Grid parameters.  The formatting looks odd in the script but fine in a text file.
+print("     ROI Grids:");
+print("                             Cy5     HEX     FAM");
+print("        X:                   " + roiArrayCy5[0] + "       " + roiArrayHEX[0] + "      " + roiArrayFAM[0]);
+print("        Y:                   " + roiArrayCy5[1] + "       " + roiArrayHEX[1] + "      " + roiArrayFAM[1]);
+print("        Width:              " + roiArrayCy5[2] + "   " + roiArrayHEX[2] + "   " + roiArrayFAM[2]);
+print("        Height:             " + roiArrayCy5[3] + "   " + roiArrayHEX[3] + "   " + roiArrayFAM[3]);
+print("        arrayspacing:        " + roiArrayCy5[4] + "     " + roiArrayHEX[4] + "     " + roiArrayFAM[4]);
+print("        numArrays:           " + roiArrayCy5[5] + "        " + roiArrayHEX[5] + "       " + roiArrayFAM[5]);
+print("        numRow:              " + roiArrayCy5[6] + "       " + roiArrayHEX[6] + "      " + roiArrayFAM[6]);
+print("        numCol:              " + roiArrayCy5[7] + "       " + roiArrayHEX[7] + "      " + roiArrayFAM[7]);
+
+// The Log is the window to which things get printed. Save its contents as metadata
+selectWindow("Log");
+saveAs("Text", metadataOutput + "Metadata_" + thisScript);
+
+// Do some clean-up
+print("\\Clear");
+run("Clear Results");
+roiManager("reset");
